@@ -2,7 +2,6 @@
 
 ### 🎮 Rehabilitación cervical interactiva con control de cabeza e inteligencia artificial
 
-**Autor:** [Suarez SH](https://sfysh.com/)  
 **Repositorio:** [https://github.com/Suarezsh/RehabDrive](https://github.com/Suarezsh/RehabDrive)
 
 ---
