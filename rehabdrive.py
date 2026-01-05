@@ -8,32 +8,13 @@ import mediapipe as mp
 import os
 import time 
 
-import asyncio 
-from google import genai
-from google.genai import types
-from concurrent.futures import ThreadPoolExecutor
 
-GEMINI_API_TOKEN = "AIzaSyDCX3ll3Tethn62A1RRAW-POqKAnMLgaqQ" 
-ASSISTANT_NAME = "Doc IA"
 
-try:
-    client = genai.Client(api_key=GEMINI_API_TOKEN)
-    ia_conectada = True
-except Exception as e:
-    print(f"Error al inicializar el cliente Doc IA: {e}")
-    ia_conectada = False
 
-executor = ThreadPoolExecutor(max_workers=2)
 
-SISTEMA_PROMPT = (
-    f"Eres un Asistente IA terapéutico llamado '{ASSISTANT_NAME}' para un juego de rehabilitación cervical. "
-    "Tu objetivo es: 1. Dar consejos breves y precisos (máximo 50 palabras) sobre el rendimiento del usuario, analizando **SOLO** la Distancia (km) y la Asimetría de Inclinación (conteo Izquierda/Derecha) de la última partida en un nivel específico. 2. Responder cualquier pregunta de cultura general o cualquier otro tema si la pregunta del usuario no es sobre el juego, en caso  te pregunten de tu creador es Suarez sh. "
-    "Tu tono debe ser de apoyo y profesional. Los datos de juego a considerar son: Distancia, Nivel, Total_Mov_Izq, Total_Mov_Der."
-)
 
-ia_task_queue = None 
-ia_response_queue = [] 
-ia_escribiendo = False
+
+
 
 records_metrics = {
     'FÁCIL': {'Distancia': 0.0, 'Total_Mov_Izq': 0, 'Total_Mov_Der': 0},
@@ -41,33 +22,9 @@ records_metrics = {
     'DIFÍCIL': {'Distancia': 0.0, 'Total_Mov_Izq': 0, 'Total_Mov_Der': 0},
 }
 
-records = {'FÁCIL': 0, 'INTERMEDIO': 0, 'DIFÍCIL': 0}
+records = {'FÁCIL': 0.0, 'INTERMEDIO': 0.0, 'DIFÍCIL': 0.0}
 
-def call_gemini_api(prompt, nivel_actual, last_metrics):
-    if not ia_conectada:
-        return f"ERROR: La API de Doc IA no está conectada. Revisa tu clave y conexión."
-        
-    metrica_contexto = (
-        f"Última partida registrada en Nivel {nivel_actual}: "
-        f"Distancia recorrida: {last_metrics['Distancia']:.1f} km, "
-        f"Movimientos Izq: {last_metrics['Total_Mov_Izq']}, "
-        f"Movimientos Der: {last_metrics['Total_Mov_Der']}."
-    )
-    
-    full_prompt = (
-        f"{SISTEMA_PROMPT}\n\n"
-        f"Contexto de la última partida: {metrica_contexto}\n"
-        f"Pregunta del usuario: {prompt}"
-    )
 
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=full_prompt
-        )
-        return response.text
-    except Exception as e:
-        return f"Error en la API: No pude obtener una respuesta. ({e})"
 
 ANCHO_PANTALLA = 1500 
 ALTO_PANTALLA = 800
@@ -80,22 +37,15 @@ POS_X_CARRETERA = ANCHO_COLUMNA
 POS_X_CAMARA = ANCHO_COLUMNA + ANCHO_CARRETERA 
 
 ALTO_CAMARA_VIEW = 150 
-Y_INICIO_CHAT = 220 
-ALTO_AREA_CHAT = ALTO_PANTALLA - Y_INICIO_CHAT - 100 
-ALTO_INPUT_CHAT = 40 
 
 NEGRO = (15, 15, 15)
 BLANCO = (240, 240, 240)
 GRIS_CARRETERA = (100, 100, 100) 
 AZUL_FONDO = (30, 30, 50) 
 GRIS_PANEL = (50, 50, 70)
-GRIS_CHAT = (70, 70, 90) 
 ROJO_BTN = (200, 50, 50)
 VERDE_BTN = (50, 200, 50)
-AZUL_BTN = (50, 50, 200)
-
-COLOR_BURBUJA_USER = (37, 211, 102)  
-COLOR_BURBUJA_IA = (80, 80, 100)     
+AZUL_BTN = (50, 50, 200)     
 
 RUTA_IMAGENES = './img/'
 
@@ -107,7 +57,7 @@ DIFICULTADES = {
 
 pygame.init()
 PANTALLA = pygame.display.set_mode((ANCHO_PANTALLA, ALTO_PANTALLA))
-pygame.display.set_caption("Carrera Terapéutica con Asistente IA")
+pygame.display.set_caption("Carrera Terapéutica")
 RELOJ = pygame.time.Clock()
 FUENTE_TITULO = pygame.font.Font(None, 50)
 FUENTE_SUBTITULO = pygame.font.Font(None, 35)
@@ -209,108 +159,9 @@ class Boton:
         return False
 
 
-class InputBox:
-    def __init__(self, x, y, w, h):
-        self.rect = pygame.Rect(x, y, w - 45, h)
-        self.color = GRIS_PANEL
-        self.text = ""
-        self.activo = False
-        self.btn_enviar_rect = pygame.Rect(x + w - 40, y, 40, h)
 
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos) or self.btn_enviar_rect.collidepoint(event.pos):
-                self.activo = True
-            else:
-                self.activo = False
-        if event.type == pygame.KEYDOWN and self.activo:
-            if event.key == pygame.K_RETURN:
-                return self.text
-            elif event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
-            else:
-                if FUENTE_SMALL.size(self.text + event.unicode)[0] < self.rect.width - 10:
-                    self.text += event.unicode
-        return None
 
-    def dibujar(self, pantalla):
-        pygame.draw.rect(pantalla, self.color, self.rect, border_radius=5)
-        borde_color = AZUL_BTN if self.activo else GRIS_PANEL
-        pygame.draw.rect(pantalla, borde_color, self.rect, 2, border_radius=5)
-        txt_surface = FUENTE_SMALL.render(self.text, True, BLANCO)
-        pantalla.blit(txt_surface, (self.rect.x + 5, self.rect.y + 10))
-        pygame.draw.rect(pantalla, VERDE_BTN, self.btn_enviar_rect, border_radius=5)
-        enviar_texto = FUENTE_SMALL.render("↑", True, BLANCO)
-        pantalla.blit(enviar_texto, (self.btn_enviar_rect.x + 10, self.btn_enviar_rect.y + 7))
 
-class ChatBox:
-    def __init__(self, rect):
-        self.rect = rect
-        self.historial = []
-        self.scroll_y = 0
-        self.line_height = 20
-        self.max_content_height = self.rect.height
-
-    def añadir_mensaje(self, remitente, texto):
-        palabras = texto.split()
-        lineas = []
-        linea_actual = ""
-        for palabra in palabras:
-            if FUENTE_SMALL.size(linea_actual + " " + palabra)[0] < self.rect.width - 40:
-                linea_actual += " " + palabra
-            else:
-                lineas.append(linea_actual.strip())
-                linea_actual = palabra
-        lineas.append(linea_actual.strip())
-        for linea in lineas:
-            self.historial.append({'remitente': remitente, 'texto': linea})
-        total_content_height = len(self.historial) * self.line_height
-        if total_content_height > self.max_content_height:
-            self.scroll_y = self.max_content_height - total_content_height
-
-    def dibujar(self, pantalla, ia_escribiendo):
-        pygame.draw.rect(pantalla, GRIS_CHAT, self.rect, border_radius=5)
-        inner_rect = self.rect.inflate(-10, -10)
-        pantalla.set_clip(inner_rect)
-        y_pos = inner_rect.y + self.scroll_y
-        for mensaje in self.historial:
-            remitente = mensaje['remitente']
-            texto = mensaje['texto']
-            color_fondo = COLOR_BURBUJA_USER if remitente == 'Usuario' else COLOR_BURBUJA_IA
-            color_texto = NEGRO if remitente == 'Usuario' else BLANCO
-            texto_superficie = FUENTE_SMALL.render(texto, True, color_texto)
-            texto_rect = texto_superficie.get_rect()
-            if remitente == ASSISTANT_NAME:
-                texto_rect.x = inner_rect.x + 5
-            else:
-                texto_rect.right = inner_rect.right - 5
-            texto_rect.y = y_pos
-            burbuja_rect = texto_rect.inflate(10, 5)
-            pygame.draw.rect(pantalla, color_fondo, burbuja_rect, border_radius=5)
-            pantalla.blit(texto_superficie, texto_rect)
-            y_pos += self.line_height
-        if ia_escribiendo:
-            texto_escribiendo = f"{ASSISTANT_NAME} escribiendo..."
-            texto_surf = FUENTE_SMALL.render(texto_escribiendo, True, BLANCO)
-            texto_rect = texto_surf.get_rect(x=inner_rect.x + 5, y=y_pos)
-            burbuja_rect = texto_rect.inflate(10, 5)
-            pygame.draw.rect(pantalla, COLOR_BURBUJA_IA, burbuja_rect, border_radius=5)
-            pantalla.blit(texto_surf, texto_rect)
-            if y_pos + self.line_height > inner_rect.y + inner_rect.height:
-                self.scroll_y -= self.line_height
-        pantalla.set_clip(None)
-
-    def manejar_scroll(self, evento):
-        if evento.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(evento.pos):
-            total_content_height = len(self.historial) * self.line_height
-            if ia_escribiendo:
-                total_content_height += self.line_height
-            if total_content_height > self.max_content_height:
-                max_scroll = self.max_content_height - total_content_height
-                if evento.button == 4:
-                    self.scroll_y = min(self.scroll_y + self.line_height * 3, 0)
-                elif evento.button == 5:
-                    self.scroll_y = max(self.scroll_y - self.line_height * 3, max_scroll)
 
 def dibujar_botones_juego(pantalla):
     global estado_juego
@@ -440,29 +291,7 @@ def dibujar_escenario(pantalla, todos_los_sprites, velocidad_juego, estado_juego
         pantalla.blit(IMAGEN_COLISION, imagen_colision_rect)
 
 
-def dibujar_columna_derecha(pantalla, frame_visual_surf, chat_box, input_box, ia_escribiendo):
-    
-    
-    camara_rect = pygame.Rect(POS_X_CAMARA, 0, ANCHO_COLUMNA, ALTO_PANTALLA)
-    pygame.draw.rect(pantalla, AZUL_FONDO, camara_rect)
-    
-    titulo = FUENTE_TITULO.render(f"ASISTENTE {ASSISTANT_NAME}", True, BLANCO)
-    pantalla.blit(titulo, (POS_X_CAMARA + ANCHO_COLUMNA // 2 - titulo.get_width() // 2, 30))
-    
-    estado_ia = "Doc IA Activa" if ia_conectada else "Doc IA Desconectada"
-    color_ia = VERDE_BTN if ia_conectada else ROJO_BTN
-    texto_ia = FUENTE_SMALL.render(f"Estado: {estado_ia}", True, color_ia)
-    pantalla.blit(texto_ia, (POS_X_CAMARA + 20, 70))
-    
-    x_cam = POS_X_CAMARA + ANCHO_COLUMNA // 2 - frame_visual_surf.get_width() // 2
-    y_cam = 90
-    
-    pygame.draw.rect(pantalla, NEGRO, (x_cam - 5, y_cam - 5, frame_visual_surf.get_width() + 10, frame_visual_surf.get_height() + 10), border_radius=5)
-    pantalla.blit(frame_visual_surf, (x_cam, y_cam))
-    
-    chat_box.dibujar(pantalla, ia_escribiendo)
-    
-    input_box.dibujar(pantalla)
+
 
 
 def get_head_tilt_mediapipe(frame):
@@ -487,15 +316,9 @@ def get_head_tilt_mediapipe(frame):
 
 
 def juego_principal():
-    global estado_juego, records, nivel_actual, UMBRAL_INCLINACION, datos_analisis, ia_task_queue, ia_escribiendo, records_metrics
+    global estado_juego, records, nivel_actual, UMBRAL_INCLINACION, datos_analisis, records_metrics
     
-    chat_rect = pygame.Rect(POS_X_CAMARA + 20, Y_INICIO_CHAT, ANCHO_COLUMNA - 40, ALTO_AREA_CHAT)
-    chat_box = ChatBox(chat_rect)
-    
-    input_y = chat_rect.y + chat_rect.height + 10
-    input_box = InputBox(POS_X_CAMARA + 20, input_y, ANCHO_COLUMNA - 40, ALTO_INPUT_CHAT)
 
-    chat_box.añadir_mensaje(ASSISTANT_NAME, f"{ASSISTANT_NAME} listo. Puedes preguntar sobre tus resultados o cualquier otro tema.")
     
     todos_los_sprites = pygame.sprite.Group()
     grupo_enemigos = pygame.sprite.Group()
@@ -505,7 +328,8 @@ def juego_principal():
     puntuacion = 0
     colision_pos = (0, 0)
     contador_frames_coche = 0
-    colision_time = 0 
+    colision_time = 0
+    enemigos_con_reaccion = {} 
     
     datos_analisis_final = {
         'Distancia': 0, 
@@ -520,23 +344,14 @@ def juego_principal():
         VELOCIDAD_JUEGO = DIFICULTADES[nivel_actual]['velocidad_juego']
         INTERVALO_COCHE = DIFICULTADES[nivel_actual]['intervalo']
 
-        if ia_task_queue and ia_task_queue.done():
-            ia_escribiendo = False 
-            try:
-                respuesta = ia_task_queue.result()
-                chat_box.añadir_mensaje(ASSISTANT_NAME, respuesta)
-            except Exception as e:
-                chat_box.añadir_mensaje(ASSISTANT_NAME, f"ERROR de conexión de Doc IA.")
-            ia_task_queue = None 
-
         ret, frame_camara = CAP.read()
-        if not ret: 
+        if not ret:
             print("Error: No se puede acceder a la cámara.")
-            break 
-            
+            break
+
         frame_camara = cv2.flip(frame_camara, 1)
         angulo_inclinacion, frame_visual = get_head_tilt_mediapipe(frame_camara)
-        
+
         frame_visual_surf = cv2.cvtColor(frame_visual, cv2.COLOR_BGR2RGB)
         frame_visual_surf = np.rot90(frame_visual_surf)
         frame_visual_surf = pygame.surfarray.make_surface(frame_visual_surf)
@@ -547,7 +362,6 @@ def juego_principal():
         
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                executor.shutdown(wait=False)
                 CAP.release(); cv2.destroyAllWindows(); pygame.quit(); sys.exit()
             
             for btn in botones_nivel + botones_juego:
@@ -562,19 +376,7 @@ def juego_principal():
                         enemigos_con_reaccion = {}
                         break
 
-            texto_enviado = input_box.handle_event(evento)
-            if evento.type == pygame.MOUSEBUTTONDOWN and input_box.btn_enviar_rect.collidepoint(evento.pos):
-                texto_enviado = input_box.text
 
-            if texto_enviado and texto_enviado.strip():
-                chat_box.añadir_mensaje('Usuario', texto_enviado)
-                input_box.text = "" 
-                
-                if not ia_task_queue:
-                    ia_escribiendo = True 
-                    ia_task_queue = executor.submit(call_gemini_api, texto_enviado, nivel_actual, records_metrics[nivel_actual])
-                
-            chat_box.manejar_scroll(evento)
 
 
         if estado_juego == 'JUGANDO':
@@ -659,7 +461,15 @@ def juego_principal():
         dibujar_escenario(PANTALLA, todos_los_sprites, VELOCIDAD_JUEGO, estado_juego, colision_pos)
         dibujar_panel_control(PANTALLA, puntuacion, datos_analisis_final)
         dibujar_botones_juego(PANTALLA)
-        dibujar_columna_derecha(PANTALLA, frame_visual_surf, chat_box, input_box, ia_escribiendo)
+        # Dibujar vista de cámara en el panel derecho
+        cam_rect = pygame.Rect(POS_X_CAMARA, 0, ANCHO_COLUMNA, ALTO_PANTALLA)
+        pygame.draw.rect(PANTALLA, AZUL_FONDO, cam_rect)
+        titulo_cam = FUENTE_TITULO.render("VISTA FACIAL", True, BLANCO)
+        PANTALLA.blit(titulo_cam, (POS_X_CAMARA + ANCHO_COLUMNA // 2 - titulo_cam.get_width() // 2, 30))
+        x_cam = POS_X_CAMARA + ANCHO_COLUMNA // 2 - frame_visual_surf.get_width() // 2
+        y_cam = 90
+        pygame.draw.rect(PANTALLA, NEGRO, (x_cam - 5, y_cam - 5, frame_visual_surf.get_width() + 10, frame_visual_surf.get_height() + 10), border_radius=5)
+        PANTALLA.blit(frame_visual_surf, (x_cam, y_cam))
         
         if estado_juego == 'MENU':
            
@@ -709,5 +519,3 @@ except Exception as e:
     if 'CAP' in locals() and CAP.isOpened():
         CAP.release()
         cv2.destroyAllWindows()
-    if 'executor' in locals():
-        executor.shutdown(wait=False)
